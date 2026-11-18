@@ -3,6 +3,48 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const signupAuthMessage = document.getElementById("signup-auth-message");
+  const accountToggle = document.getElementById("account-toggle");
+  const accountActions = document.getElementById("account-actions");
+  const accountStatus = document.getElementById("account-status");
+  const loginOpenButton = document.getElementById("login-open");
+  const logoutButton = document.getElementById("logout");
+  const loginDialog = document.getElementById("login-dialog");
+  const loginForm = document.getElementById("login-form");
+  const loginMessage = document.getElementById("login-message");
+  const usernameInput = document.getElementById("username");
+  const passwordInput = document.getElementById("password");
+  const activityPlaceholder = activitySelect.options[0].cloneNode(true);
+  let teacherCredentials = null;
+
+  function getAuthorizationHeader(credentials = teacherCredentials) {
+    if (!credentials) {
+      return null;
+    }
+
+    const bytes = new TextEncoder().encode(
+      `${credentials.username}:${credentials.password}`
+    );
+    const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+    return `Basic ${btoa(binary)}`;
+  }
+
+  function updateAuthenticationUI() {
+    const signedIn = teacherCredentials !== null;
+    signupForm.classList.toggle("hidden", !signedIn);
+    signupAuthMessage.classList.toggle("hidden", signedIn);
+    loginOpenButton.classList.toggle("hidden", signedIn);
+    logoutButton.classList.toggle("hidden", !signedIn);
+    accountStatus.textContent = signedIn
+      ? `Signed in as ${teacherCredentials.username}`
+      : "Not signed in";
+  }
+
+  function showMessage(element, text, type) {
+    element.textContent = text;
+    element.className = type;
+    element.classList.remove("hidden");
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -12,6 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      activitySelect.replaceChildren(activityPlaceholder.cloneNode(true));
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -30,7 +73,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${
+                        teacherCredentials
+                          ? `<button class="delete-btn" data-activity="${name}" data-email="${email}" aria-label="Remove ${email}">❌</button>`
+                          : ""
+                      }</li>`
                   )
                   .join("")}
               </ul>
@@ -80,6 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: { Authorization: getAuthorizationHeader() },
         }
       );
 
@@ -92,6 +140,11 @@ document.addEventListener("DOMContentLoaded", () => {
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
+        if (response.status === 401) {
+          teacherCredentials = null;
+          updateAuthenticationUI();
+          fetchActivities();
+        }
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
       }
@@ -124,6 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: { Authorization: getAuthorizationHeader() },
         }
       );
 
@@ -137,6 +191,11 @@ document.addEventListener("DOMContentLoaded", () => {
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
+        if (response.status === 401) {
+          teacherCredentials = null;
+          updateAuthenticationUI();
+          fetchActivities();
+        }
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
       }
@@ -155,6 +214,63 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  accountToggle.addEventListener("click", () => {
+    const isExpanded = accountToggle.getAttribute("aria-expanded") === "true";
+    accountToggle.setAttribute("aria-expanded", String(!isExpanded));
+    accountActions.classList.toggle("hidden", isExpanded);
+  });
+
+  loginOpenButton.addEventListener("click", () => {
+    loginMessage.classList.add("hidden");
+    loginForm.reset();
+    loginDialog.showModal();
+  });
+
+  document.getElementById("login-cancel").addEventListener("click", () => {
+    loginDialog.close();
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const credentials = {
+      username: usernameInput.value,
+      password: passwordInput.value,
+    };
+
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        headers: { Authorization: getAuthorizationHeader(credentials) },
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        showMessage(loginMessage, result.detail || "Login failed.", "error");
+        return;
+      }
+
+      teacherCredentials = credentials;
+      passwordInput.value = "";
+      loginDialog.close();
+      accountActions.classList.add("hidden");
+      accountToggle.setAttribute("aria-expanded", "false");
+      updateAuthenticationUI();
+      fetchActivities();
+    } catch (error) {
+      showMessage(loginMessage, "Failed to sign in. Please try again.", "error");
+      console.error("Error signing in:", error);
+    }
+  });
+
+  logoutButton.addEventListener("click", () => {
+    teacherCredentials = null;
+    updateAuthenticationUI();
+    accountActions.classList.add("hidden");
+    accountToggle.setAttribute("aria-expanded", "false");
+    fetchActivities();
+  });
+
   // Initialize app
+  updateAuthenticationUI();
   fetchActivities();
 });

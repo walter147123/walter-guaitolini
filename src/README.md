@@ -15,22 +15,34 @@ Uma aplicação FastAPI super simples que permite aos estudantes visualizar e se
    pip install fastapi uvicorn
    ```
 
-2. Execute a aplicação:
+2. Crie uma conta para cada professor autorizado. O comando solicita a senha sem exibi-la e grava somente um hash com salt no arquivo local ignorado pelo Git:
 
    ```
-   python app.py
+   python -m src.create_teacher professor
    ```
 
-3. Abra seu navegador e vá para:
+   Repita o comando para cada professor. Senhas devem ter pelo menos 12 caracteres. O arquivo `src/teachers.json` deve permanecer fora do controle de versão.
+
+3. Execute a aplicação a partir da raiz do repositório:
+
+   ```
+   uvicorn src.app:app --reload
+   ```
+
+4. Abra seu navegador e vá para:
    - Documentação da API: http://localhost:8000/docs
    - Documentação alternativa: http://localhost:8000/redoc
+
+Os estudantes podem consultar as atividades e os participantes sem entrar. O cadastro e cancelamento de inscrições exigem uma conta de professor. Em produção, publique a aplicação somente por HTTPS.
 
 ## Endpoints da API
 
 | Método | Endpoint                                                          | Descrição                                                           |
 | ------ | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
 | GET    | `/activities`                                                     | Obter todas as atividades com seus detalhes e contagem atual de participantes |
-| POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Inscrever-se em uma atividade                                       |
+| POST   | `/auth/login`                                                      | Validar as credenciais de um professor                              |
+| POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Inscrever um estudante (professor autenticado)                       |
+| DELETE | `/activities/{activity_name}/unregister?email=student@mergington.edu` | Cancelar uma inscrição (professor autenticado)                    |
 
 ## Modelo de Dados
 
